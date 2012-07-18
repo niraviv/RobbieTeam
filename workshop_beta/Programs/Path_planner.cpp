@@ -60,9 +60,9 @@ void single_robot_planner_example(int argc, char* argv[])
   Planner::Polygon_vec&       workspace(env.get_workspace());
   Planner::Extended_polygon   my_robot(env.get_robot_a());	
   
-  //initialize the planner and preprocess 
-  Planner planner(workspace, my_robot);    
-  planner.preprocess(); 
+  //initialize the planner and preprocess
+  Planner planner(workspace, my_robot);
+  planner.preprocess(env.get_source_configiration_a(), env.get_target_configirations());
    
   //load query
   Planner::Reference_point q_s (env.get_source_configiration_a());
@@ -106,5 +106,6 @@ void single_robot_planner_example(int argc, char* argv[])
       }
     }
   }
+  tm.write_time_log(std::string("the end!"));
   return;
 }

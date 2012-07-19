@@ -107,7 +107,84 @@ public:
 
     return;
   }
+
+
+  //NIR: This function finds
+  bool find_paths_to_multiple_targets(const Node& source, const vector<Node>& targets, vector<list<Node>>& paths) {
+
+	  CGAL_precondition(is_in_graph(source));
+	  int source_id(_node_id_map[source]), number_of_targets = targets.size();
+
+	  if (paths.size() != targets.size()) {
+		  std::cout << "Input error in Graph::find_paths_to_multiple targets: the targets vector and paths vector have different sizes." << std::endl;
+		  return false;
+	  }
+
+	  vector<int>::iterator targets_iterator = targets.begin();
+
+	  vector<int> target_ids(number_of_targets);
+	  vector<int>::iterator target_ids_iterator = target_ids.begin();
+
+	  while (targets_iterator != targets.end()) {
+		  CGAL_precondition(is_in_graph(*targets_iterator));
+		  *(target_ids_iterator++) = _node_id_map[*(targets_iterator++)];
+	  }
+
+	  vector<bool> target_is_in_same_cc_as_source(num_of_targets, false);
+	  vector<bool>::iterator target_is_in_same_cc_as_source_iterator;
+	  bool path_exists = false;
+
+	  if (_use_connected_components) {
+		  target_ids_iterator = target_ids.begin();
+		  target_is_in_same_cc_as_source_iterator = target_is_in_same_cc_as_source.begin();
+		  while (target_ids_iterator != target_ids.end()) {
+			  if (_is_in_same_cc(source_id,*(target_ids_iterator++))) {
+				  path_exists = true;
+				  *target_is_in_same_cc_as_source_iterator = true;
+			  }
+			  target_is_in_same_cc_as_source_iterator++;
+		  }
+		  if (!path_exists) {
+			  return;
+		  }
+	  }
+
+	  run_dijkstra(source_id);
+
+	  int current_target_id;
+	  list<Node> current_path;
+
+	  target_ids_iterator = target_ids.begin();
+	  target_is_in_same_cc_as_source_iterator = target_is_in_same_cc_as_source.begin();
+	  vector<list<Node>>::iterator paths_iterator = paths.begin();
+	  path_exists = false;
+
+	  while (target_ids_iterator != target_ids.end()) {
+
+		  current_target_id = *(target_ids_iterator++);
+		  current_path = *(paths_iterator++);
+		  
+		  if ((_use_connected_components && !(*(target_is_in_same_cc_as_source++))) || (_parent[current_target_id] == current_target_id)) {
+			  continue;
+		  }
+		  path_exists = true;
+
+		  CGAL_precondition(_id_node_map.find(current_target_id) != _id_node_map.end());
+		  current_path.push_front(_id_node_map[current_target_id]);
+		  
+		  while(_parent[current_target_id] != current_target_id) {
+			  current_target_id = _parent[current_target_id];
+			  CGAL_precondition(_id_node_map.find(current_target_id) != _id_node_map.end());
+			  current_path.push_front (_id_node_map[current_target_id]);
+		  }
+	  }
+
+	  return path_exists;
+  }
+  //NIR
   
+
+
   /* this method runs Dijkstra algorithm on the graph.	   */
   void find_path(const Node& source, const Node& target, std::list<Node>& path)
   {

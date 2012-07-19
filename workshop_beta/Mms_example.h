@@ -67,6 +67,15 @@ private:
     
   Random_utils            _rand;
   AK                      _ak;
+
+  //NIR: this is how we store, for a pair of reference points of interest,
+  //a motion sequence from one to the other.
+  //More speficially, we map a pair of reference points (the source and target)
+  //to a pair of motion sequence and a metric for the motion sequence (higher values correspond to lower quality paths).
+  typedef map<pair<Reference_point, Reference_point>, pair<Motion_sequence, K>>	Motion_sequence_map;
+  Motion_sequence_map _motion_sequence_map;
+  //NIR
+
 public:
   //constructor
   Mms_path_planner_example  (Polygon_vec &workspace, Extended_polygon& robot)
@@ -93,6 +102,81 @@ public:
     global_tm.write_time_log(std::string("finished preproccesing"));
     return;
   }
+
+
+
+  //NIR: This is the multiple-target query function. It recieves as input:
+  //	-A distinct lack of intelligence.
+  //and returns bluh.
+  bool query(const Reference_point& source, const vector<Reference_point>& targets) {
+
+	  //Connect the source to the graph.
+	  //perturbed_source is the point of connection,
+	  //source_motion_sequence is a path from the source to the point of connection.
+	  Motion_sequence source_motion_sequence;
+	  Reference_point perturbed_source = connect_to_graph(source, source_motion_sequence);
+	  if (perturbed_source ==  Reference_point()) {
+		  std::cout << "failed to connect to pre-processed configuration space" << std::endl;
+		  return false;
+	  }
+
+	  //Get the index of the FSC in which the point of connection resides.
+	  Fsc_indx perturbed_source_fsc_index(get_containig_fsc(perturbed_source));
+	  CGAL_postcondition (perturbed_source_fsc_index != Fsc_indx());
+
+
+	  //Connect each target to the graph.
+	  //Once again, perturbed_targets are the points of connection for each target,
+	  //and target_motion_sequences are paths from each target to its point of connection.
+	  vector<Reference_point>::iterator targets_iterator = targets_begin();
+	  int number_of_targets = targets.size();
+
+	  vector<Motion_sequence> target_motion_sequences(number_of_targets);
+	  vector<Motion_sequence>::iterator target_motions_sequences_iterator = target_motion_sequences.begin();
+	  
+	  vector<Reference_point> perturbed_targets(number_of_targets);
+	  vector<Reference_point>::iterator perturbed_targets_iterator = peturbed_targets.begin();
+
+	  while (targets_iterator != targets.end()) {
+		  *perturbed_targets_iterator = connect_to_graph(*(targets_iterator++), *(motion_targets_iterator++));
+		  if (*perturbed_targets_iterator ==  Reference_point()) {
+			  std::cout << "failed to connect to pre-processed configuration space" << std::endl;
+			  return false;
+		  }
+		  perturbed_targets_iterator++;
+	  }
+
+	  //Get the indices for the FSCs in which each point of connection resides.
+	  vector<Fsc_indx> perturbed_target_fsc_indices(number_of_targets);
+	  vector<Fsc_indx>::iterator perturbed_target_fsc_indices_iterator = perturbed_target_fsc_indices.begin();
+
+	  perturbed_targets_iterator = perturbed_targets.begin();
+
+	  while (perturbed_targets_iterator != perturbed_targets.end()) {
+		  *perturbed_target_fsc_indices = get_containig_fsc(*(perturbed_targets_iterator++));
+		  CGAL_postcondition (*perturbed_target_fsc_indices != Fsc_indx());
+		  perturbed_target_fsc_indices++;
+	  }
+	  
+
+	  
+	  /*This is stupid
+
+	  BOOST_FOREACH(Reference_point target, targets) {
+		  if (!this.query(source, target, _motion_sequence_map[make_pair(source, target)])) {
+			  return false;
+		  }
+	  }
+	  return true;
+
+	  reutnr bluh
+	  */
+	  return false;
+  }
+  //NIR
+
+
+
   //query
   bool query( const Reference_point& source, const Reference_point& target,
               Motion_sequence& motion_sequence) 

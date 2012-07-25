@@ -65,46 +65,64 @@ void single_robot_planner_example(int argc, char* argv[])
   planner.preprocess(); 
    
   //load query
-  Planner::Reference_point q_s (env.get_source_configiration_a());
-  Planner::Reference_point q_t (env.get_target_configirations().front());
+  Planner::Reference_point source(env.get_source_configiration_a());
 
-  //perform query
-  Motion_sequence<Planner::K> motion_sequence;
-  bool found_path = planner.query(q_s, q_t, motion_sequence);
+  //NIR: now we store all the target configurations instead of just the front,
+  //and perform a multiple-target query.
+  std::vector<Planner::Reference_point> targets = env.get_target_configirations();
+  int number_of_targets = targets.size();
+  std::vector<Planner::Motion_sequence> motion_sequences(number_of_targets);
+  if (!planner.query(source, targets, motion_sequences)) {
+    std::cout << "no paths found :-(" << std::endl;
+	return;
+  }
+  std::cout << "at least one path was found :-)" << std::endl;
 
-  if (!found_path)
-    std::cout<<"no path found :-("<<std::endl;
-  else
-    std::cout<<"path found :-)"<<std::endl;
+  //Find the first nonempty motion sequence:
+  Planner::Motion_sequence shortest_motion_sequence = motion_sequences[0];
+  int j(0);
+  while (shortest_motion_sequence.get_sequence().empty()) {
+	  shortest_motion_sequence = motion_sequences[++j];
+  }
+  double translational_speed = configuration.get_translational_speed(),
+	  rotational_speed = configuration.get_rotational_speed();
+  double shortest_motion_time = shortest_motion_sequence.motion_time(translational_speed, rotational_speed);
+  Planner::Reference_point nearest_target = targets[j];
+
+  //See if there are any shorter nonempty motion sequences:
+  for (j++; j < number_of_targets; j++) {
+	  Planner::Motion_sequence current_motion_sequence = motion_sequences[j];
+	  if (current_motion_sequence.get_sequence().empty()) {
+		  continue;
+	  }
+	  double current_motion_time = current_motion_sequence.motion_time(translational_speed, rotational_speed);
+	  if (current_motion_time < shortest_motion_time) {
+		  shortest_motion_time = current_motion_time;
+		  shortest_motion_sequence = current_motion_sequence;
+		  nearest_target = targets[j];
+	  }
+  }
 
   //example of how to create a path that can be loaded by the GUI
-  if (found_path)
-  {
-    Converter::Path_3d path;
-    Converter converter;
-    converter(motion_sequence, std::back_inserter(path));
-
-    ofstream os("path.txt");
-    os <<path.size()<<std::endl;
-    for (unsigned int i(0); i < path.size(); ++i)
-    {
-      if (i == 0)
-      {
-
-        os  << path[i].x <<" " << path[i].y <<" " << path[i].t <<" "
-            << CGAL::to_double(q_t.get_location().x()) <<" " //we place the second robot at the target for ease of visualization
-            << CGAL::to_double(q_t.get_location().y()) <<" " //we place the second robot at the target for ease of visualization
-            << q_t.get_rotation().to_angle()                 //we place the second robot at the target for ease of visualization
-            <<std::endl;
-      }
-      else //i >0
-      {
-        os  << path[i].x <<" " << path[i].y <<" " << path[i].t <<" "  //first robot location
-            << 0 <<" " << 0 <<" " << 0 <<" "                          //second robot is static
-            << 2                                                      //speed is arbitrarily chosen to be 2
-            <<std::endl;
-      }
-    }
+  Converter::Path_3d path;
+  Converter converter;
+  converter(shortest_motion_sequence, std::back_inserter(path));
+  
+  std::ofstream os("path.txt");
+  os << path.size() << std::endl;
+  for (unsigned int i(0); i < path.size(); ++i) {
+	  if (i == 0) {
+		  os  << path[i].x << " " << path[i].y << " " << path[i].t << " "
+			  << CGAL::to_double(nearest_target.get_location().x()) << " " //we place the second robot at the target for ease of visualization
+			  << CGAL::to_double(nearest_target.get_location().y()) << " " //we place the second robot at the target for ease of visualization
+			  << nearest_target.get_rotation().to_angle()                  //we place the second robot at the target for ease of visualization
+			  << std::endl;
+	  } else {		//i >0
+		  os  << path[i].x << " " << path[i].y << " " << path[i].t << " "  //first robot location
+			  << 0 << " " << 0 << " " << 0 << " "                          //second robot is static
+			  << 2                                                         //speed is arbitrarily chosen to be 2
+			  << std::endl;
+	  }
   }
   return;
 }

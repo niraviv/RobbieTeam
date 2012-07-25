@@ -107,7 +107,69 @@ public:
 
     return;
   }
+
+
+  //NIR: This function computes paths from a source to mutiple targets. It recieves as input:
+  //
+  //	- source, a node on the graph,
+  //	- targets, a vector of target nodes on the graph,
+  //	- paths, a vector of paths (lists of nodes) with the same length as targets,
+  //
+  //and, for all i from 0 to the number of targets minus one,
+  //if there is a path from the node source to the node targets[i] on the graph, appends it to the back of paths[i].
+  //Otherwise, paths[i] remains unchanged.
+  bool find_paths_to_multiple_targets(const Node& source, const std::vector<Node>& targets, std::vector<std::list<Node>>& paths) {
+
+	  CGAL_precondition(is_in_graph(source));
+	  int number_of_targets(targets.size());
+
+	  //Find ids for source and targets.
+	  //If the graph keeps track of connected components, note all targets that are not in the same component as the source.
+	  //If all targets found to be unreachable this way, return.
+	  int source_id(_node_id_map[source]);
+	  std::vector<int> target_ids(number_of_targets);
+	  std::vector<bool> target_is_in_same_cc_as_source(number_of_targets, false);
+	  bool no_path_exists = true;
+	  for (int i(0); i < number_of_targets; i++) {
+		  CGAL_precondition(is_in_graph(targets[i]));
+		  target_ids[i] = _node_id_map[targets[i]];
+		  if (_use_connected_components) {
+			  target_is_in_same_cc_as_source[i] = _is_in_same_cc(source_id, target_ids[i]);
+			  if (target_is_in_same_cc_as_source[i]) {
+				  no_path_exists = false;
+			  }
+		  }
+	  }
+	  if (_use_connected_components && no_path_exists) {
+		  return false;
+	  }
+
+	  //Run Dijkstra's algorithm on the graph.
+	  run_dijkstra(source_id);
+
+	  //Put the paths in the output vector.
+	  no_path_exists = true;
+	  for (int i(0); i < number_of_targets; i++) {
+		  int current_target_id = target_ids[i];
+		  std::list<Node>& current_path = paths[i];
+		  if ((_use_connected_components && !(target_is_in_same_cc_as_source[i])) || _parent[current_target_id] == current_target_id) {
+			  continue;
+		  }
+		  CGAL_precondition(_id_node_map.find(current_target_id) != _id_node_map.end());
+		  no_path_exists = false;
+		  current_path.push_front(_id_node_map[current_target_id]);
+		  while(_parent[current_target_id] != current_target_id) {
+			  current_target_id = _parent[current_target_id];
+			  CGAL_precondition(_id_node_map.find(current_target_id) != _id_node_map.end());
+			  current_path.push_front(_id_node_map[current_target_id]);
+		  }
+	  }
+	  return !no_path_exists;
+  }
+  //NIR
   
+
+
   /* this method runs Dijkstra algorithm on the graph.	   */
   void find_path(const Node& source, const Node& target, std::list<Node>& path)
   {

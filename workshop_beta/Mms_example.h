@@ -67,6 +67,7 @@ private:
     
   Random_utils            _rand;
   AK                      _ak;
+
 public:
   //constructor
   Mms_path_planner_example  (Polygon_vec &workspace, Extended_polygon& robot)
@@ -93,6 +94,105 @@ public:
     global_tm.write_time_log(std::string("finished preproccesing"));
     return;
   }
+
+
+
+  //NIR: This is the multiple-target query function. It recieves as input:
+  //
+  //	- source, a point in the configuration space.
+  //	- targets, a vector of points in the configuration space.
+  //	- motion_sequences, a vector of motion sequences with the same length as targets.
+  //
+  //and tries to find a path from the source to each target.
+  //If found, it appends the motion sequence to the corresponding entry in motion_sequences.
+  //Otherwise, the corresponding entry in paths remains unchanged.
+  bool query(const Reference_point& source, const std::vector<Reference_point>& targets, std::vector<Motion_sequence>& motion_sequences) {
+
+	  //Try to connect the source to the graph.
+	  Motion_sequence source_motion_sequence;
+	  Reference_point perturbed_source = connect_to_graph(source, source_motion_sequence);
+	  if (perturbed_source ==  Reference_point()) {
+		  std::cout << "Failed to connect source to pre-processed configuration space." << std::endl;
+		  return false;
+	  }
+	  Fsc_indx perturbed_source_fsc_index(get_containig_fsc(perturbed_source));
+	  CGAL_postcondition (perturbed_source_fsc_index != Fsc_indx());
+	  
+	  int number_of_targets = targets.size();
+	  
+	  //Try to connect each target to the graph.
+	  std::vector<Motion_sequence> target_motion_sequences(number_of_targets);
+	  std::vector<Reference_point> perturbed_targets(number_of_targets);
+	  std::vector<Fsc_indx> perturbed_targets_fsc_indexes(number_of_targets);
+	  bool a_path_exists = false;
+	  for (int i(0); i < number_of_targets; i++) {
+		  Reference_point& current_perturbed_target = perturbed_targets[i];
+		  current_perturbed_target = connect_to_graph(targets[i], target_motion_sequences[i]);
+		  if (current_perturbed_target ==  Reference_point()) {
+			  std::cout << "Failed to connect target " << i << " to pre-processed configuration space." << std::endl;
+		  }
+		  a_path_exists = true;
+		  perturbed_targets_fsc_indexes[i] = get_containig_fsc(current_perturbed_target);
+		  CGAL_postcondition (perturbed_targets_fsc_indexes[i] != Fsc_indx());
+	  }
+	  if (!a_path_exists) {
+		  return false;
+	  }
+
+	  //Plan paths on the connectivity graph.
+	  std::vector<std::list<Fsc_indx>> fsc_index_paths(number_of_targets);
+	  a_path_exists = _graph.find_paths_to_multiple_targets(perturbed_source_fsc_index, perturbed_targets_fsc_indexes, fsc_index_paths);
+	  if (!a_path_exists) {
+		  return false;
+	  }
+
+	  //Construct real motion sequences:
+	  for (int i(0); i < number_of_targets; i++) {
+
+		  //If no path was found to the current target, continue.
+		  std::list<Fsc_indx> current_fsc_index_path = fsc_index_paths[i];
+		  if (current_fsc_index_path.empty()) {
+			  continue;
+		  }
+
+		  //Otherwise, add the motion from the source to its point of connection.
+		  Motion_sequence& current_motion_sequence = motion_sequences[i];
+		  current_motion_sequence.add_motion_sequence(source_motion_sequence);
+
+		  //Add the motions from the source's point of connection
+		  //to each target's point of connection.
+		  std::list<Fsc_indx>::iterator current_fsc_index_iterator = current_fsc_index_path.begin();
+		  std::list<Fsc_indx>::iterator next_fsc_index_iterator = ++current_fsc_index_iterator;
+		  Reference_point current_reference_point = perturbed_source;
+		  while (next_fsc_index_iterator != current_fsc_index_path.end()) {
+			  Reference_point next_reference_point = get_intersection(*current_fsc_index_iterator, *next_fsc_index_iterator);
+			  Fsc *current_fsc_pointer = get_fsc(*current_fsc_index_iterator);
+			  CGAL_postcondition(current_fsc_pointer->contains(current_reference_point));
+			  CGAL_postcondition(current_fsc_pointer->contains(next_reference_point));
+			  CGAL_precondition ((current_motion_sequence.get_sequence().empty()) ||
+				  (current_motion_sequence.get_sequence().back()->target() == current_reference_point));
+			  plan_path(current_fsc_pointer, current_reference_point, next_reference_point, current_motion_sequence);
+			  CGAL_precondition ((current_motion_sequence.get_sequence().empty()) || 
+				  (current_motion_sequence.get_sequence().back()->target() == next_reference_point));
+			  current_fsc_index_iterator++;
+			  next_fsc_index_iterator++;
+			  current_reference_point = next_reference_point;
+			  delete current_fsc_pointer;
+		  }
+		  Fsc *current_fsc_pointer = get_fsc(*current_fsc_index_iterator);
+		  plan_path(current_fsc_pointer, current_reference_point, perturbed_targets[i], current_motion_sequence);
+		  delete current_fsc_pointer;
+
+		  //Add the motions from each target's point of connection to its respective target.
+		  target_motion_sequences[i].reverse_motion_sequence();
+		  current_motion_sequence.add_motion_sequence(target_motion_sequences[i]);
+	  }
+	  return true;
+  }
+  //NIR
+
+
+
   //query
   bool query( const Reference_point& source, const Reference_point& target,
               Motion_sequence& motion_sequence) 
